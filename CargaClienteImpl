@@ -1,0 +1,158 @@
+package com.scud.springbootstarter;
+
+import java.io.InputStream;
+import java.math.BigDecimal;
+import java.sql.CallableStatement;
+import java.sql.Clob;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Map;
+import java.util.Scanner;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.SqlOutParameter;
+import org.springframework.jdbc.core.SqlParameter;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.simple.SimpleJdbcCall;
+import org.springframework.stereotype.Repository;
+
+import oracle.jdbc.OracleTypes;
+
+@Repository
+
+public class CargaClienteImpl {
+
+	@Autowired
+
+	@Qualifier("beanJdbcTemplate")
+
+	private JdbcTemplate jdbcTemplate;
+
+	private SimpleJdbcCall simpleJdbcCall;
+
+	private static final Logger LOGGER = LoggerFactory.getLogger(CargaClienteImpl.class);
+
+	@SuppressWarnings("resource")
+
+    public String obtemClobViaPrepareCall() {
+
+           int cd_saida = 0;
+           String msg_saida = "";
+           String content = "";
+
+           try {
+                   Connection connection = jdbcTemplate.getDataSource().getConnection();
+
+                   CallableStatement callableStatement = connection.prepareCall("{call testeproc.PKG_R.p_cart_diaria(?, ?, ?, ?, ?, ?, ?)}");
+                   callableStatement.setInt(1, 33);
+                   callableStatement.setInt(2, 2270);
+                   callableStatement.setInt(3, 290019619);
+                   callableStatement.setString(4, "04/08/2021");
+                   callableStatement.registerOutParameter(5, Types.NUMERIC);
+                   callableStatement.registerOutParameter(6, Types.VARCHAR);
+                   callableStatement.registerOutParameter(7, Types.CLOB);                  
+
+                   callableStatement.execute();                  
+
+                   cd_saida = callableStatement.getInt(5);
+                   msg_saida = callableStatement.getString(6);
+                   Clob clob = callableStatement.getClob(7); 
+
+//                  // sem usar charset e os acentos nao quebram
+//                   Long fim = clob.length();
+//                  content= clob.getSubString(1L, fim.intValue()-1);
+
+                   // acentos quebrados
+                   InputStream contentStream = clob.getAsciiStream();
+                   content = new Scanner(contentStream, "UTF-8").useDelimiter(\\A).next();
+
+           } catch (SQLException e) {
+                   e.printStackTrace();
+           }
+          
+
+           LOGGER.info("cd_saida: " + cd_saida);
+           LOGGER.info("msg_saida: " + msg_saida);
+           LOGGER.info("content: \n\n" + content);
+
+       return content;
+
+    }
+
+	public String obtemClobViaSimpleJdbcCall() {
+
+		simpleJdbcCall = new SimpleJdbcCall(jdbcTemplate)
+
+				.withSchemaName("testeproc")
+				.withCatalogName("PKG_R")
+				.withProcedureName("p_cart_diaria")
+				.declareParameters(new SqlParameter("banco", OracleTypes.NUMBER),
+						new SqlParameter("agencia", OracleTypes.NUMBER),
+						new SqlParameter("conta", OracleTypes.NUMBER),
+						new SqlParameter("data_posicao", OracleTypes.VARCHAR),
+						new SqlOutParameter("cd_saida", OracleTypes.NUMBER),
+						new SqlOutParameter("msg_saida", OracleTypes.VARCHAR),
+						new SqlOutParameter("relatorioXML", OracleTypes.CLOB)
+				);
+
+//                                                           .returningResultSet("RESULT", new RowMapper() {
+
+//                                                                           @SuppressWarnings("resource")
+
+//                                                                           @Override
+
+//                                                                           public Object mapRow(ResultSet rs, int rowNum) throws SQLException {
+
+//                                                                                          Report rep = new Report();
+
+//                                                                                          InputStream contentStream = rs.getClob("relatorioXML").getAsciiStream();
+
+//                                                                                          String content = new Scanner(contentStream, "UTF-8").useDelimiter(\\A).next();
+
+//                                                                                          rep.setRelatorioXML(content);
+
+//                                                                                          return rep;                                                                                       
+
+//                                                                           }} );
+
+		MapSqlParameterSource addValue = new MapSqlParameterSource("banco", 33)
+				.addValue("agencia", 2270)
+				.addValue("conta", 9999999)
+				.addValue("data_posicao", "04/08/2021");
+
+		Map<String, Object> result = simpleJdbcCall.execute(addValue);
+		BigDecimal cd_saida = (BigDecimal) result.get("cd_saida");
+		String msg_saida = (String) result.get("msg_saida");
+
+//                           Clob teste = (Clob) result.get("relatorioXML");
+
+//                           try {
+
+//                                           Long length = teste.length();
+
+//                                           teste.getSubString(1L, length.intValue());
+
+//                           } catch (SQLException e) {
+
+//                                           // TODO Auto-generated catch block
+
+//                                           e.printStackTrace();
+
+//                           }
+
+		LOGGER.info("CD_SAIDA: " + cd_saida);
+
+		LOGGER.info("MSG_SAIDA: " + msg_saida);
+
+//                           LOGGER.info("RELATORIOXML: " + relatorioXML);
+
+		return null;
+
+	}
+
+}
